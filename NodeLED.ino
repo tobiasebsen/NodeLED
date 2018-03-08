@@ -5,8 +5,6 @@
  * An LED controller and Art-Net node for the Teensy platform.
  * 
  */
-
-
 #include "FastLED.h"
 #include <SPI.h>
 #include <Ethernet.h>
@@ -144,11 +142,24 @@ unsigned long artsyncTimer = 0;
 //////////////////////////////////////////////
 void setup() {
 
+  // Setup some serial port debugging
+  while(!Serial && millis() < 2000);
+  Serial.begin(9600);
+  Serial.println("Initializing...");
+
+  Serial.print("CPU: ");
+  Serial.print(F_CPU / 1000000);
+  Serial.println(" MHz");
+
   // Try to load configuration from EEPROM
-  bool initConfig = !loadConfig(&config, sizeof(ArtConfig));
+  Serial.print("Loading config...");
+  bool hasConfig = loadConfig(&config, sizeof(ArtConfig));
+  if (hasConfig)
+    Serial.println("done.");
 
   // Initialize default configuration if no configuration was found
-  if (initConfig) {
+  if (!hasConfig) {
+    Serial.println("not found. Resetting config...");
     memset(&config, 0, sizeof(ArtConfig));
     mac_addr mac;
     for (int i=0; i<6; i++) {
@@ -173,14 +184,17 @@ void setup() {
     config.verLo = VERSION_LO;
 
     saveConfig(&config, sizeof(ArtConfig));
+    Serial.println("done.");
   }
 
 #ifdef PIN_RESET
+  Serial.print("Resetting Ethernet...");
   pinMode(PIN_RESET, OUTPUT);
   digitalWrite(PIN_RESET, LOW);
   delayMicroseconds(2);
   digitalWrite(PIN_RESET, HIGH);
   delay(150);
+  Serial.println("done.");
 #endif
 
   // Setup pins
@@ -191,10 +205,14 @@ void setup() {
 
 
   // Open Ethernet connection
+  Serial.print("Starting Ethernet...");
   IPAddress gateway(config.ip[0], 0, 0, 1);
   IPAddress subnet(config.mask);
   Ethernet.begin(config.mac, config.ip,  gateway, gateway, subnet);
-  udp.begin(config.udpPort);
+  if (udp.begin(config.udpPort) != 1)
+    Serial.println("error.");
+  else
+    Serial.println("done.");
 
 
   // Create 4 outputs with different lengths (can be tweaked)
@@ -208,6 +226,46 @@ void setup() {
   for (int i=0; i<NUM_OUTPUTS; i++) {
     memset((void*)ledData[i], 0, numRgbLeds[i] * 3);
     FastLED[i].show(ledData[i], numRgbLeds[i], 255);
+  }
+
+  // Print out configuration for debugging
+  Serial.print("MAC: ");
+  for (int i=0; i<6; i++) {
+    if (config.mac[i] < 10)
+      Serial.print("0");
+    Serial.print(config.mac[i], HEX);
+    if (i == 5)
+      Serial.println();
+    else
+      Serial.print(":");
+  }
+  
+  Serial.print("IP: ");
+  Serial.print(config.ip[0]);
+  Serial.print(".");
+  Serial.print(config.ip[1]);
+  Serial.print(".");
+  Serial.print(config.ip[2]);
+  Serial.print(".");
+  Serial.print(config.ip[3]);
+  Serial.println();
+
+  Serial.print("Net: ");
+  Serial.println(config.net);
+
+  Serial.print("Sub-Net: ");
+  Serial.println(config.subnet);
+
+  Serial.print("Ports: ");
+  Serial.println(config.numPorts);
+  for (int i=0; i<config.numPorts; i++) {
+    Serial.print("Port #");
+    Serial.print(i+1);
+    Serial.print(" - Universe: ");
+    Serial.print(config.portAddrOut[i]);
+    Serial.print(" - Channels: ");
+    Serial.print(numChannelsPort[i]);
+    Serial.println();
   }
 
   digitalWrite(PIN_LOC, LOW);
